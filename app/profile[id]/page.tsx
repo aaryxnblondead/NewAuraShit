@@ -1,46 +1,139 @@
-// WARNING: Never expose API keys in client-side code
 "use client"
 
 import { useEffect, useState } from "react"
 import Image from "next/image"
-import { getProfileById, type Profile } from "@/lib/data"
 import { Star, ThumbsUp, ThumbsDown, Calendar, Users, BarChart3 } from "lucide-react"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Bar, BarChart } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import WikipediaImage from "@/components/wikipedia-image"
+import { use } from "react"
+
+// Define the profile type based on the backend data structure
+interface Platform {
+  id: string;
+  figureId: string;
+  platform: string;
+  handle: string;
+  url: string;
+  verified?: boolean;
+  followers?: number;
+  engagement?: number;
+  contentQuality?: number;
+  consistency?: number;
+  longevity?: number;
+  influenceScore?: number;
+  lastUpdated?: string;
+}
+
+interface ScoreHistoryItem {
+  id: string;
+  figureId: string;
+  date: string;
+  overallScore: number;
+  credibilityScore: number;
+  longevityScore: number;
+  engagementScore: number;
+}
+
+interface Profile {
+  id: string;
+  name: string;
+  image: string;
+  profession: string;
+  biography?: string;
+  location?: string;
+  organization?: string;
+  overallScore: number;
+  credibilityScore: number;
+  longevityScore: number;
+  engagementScore: number;
+  trendingScore: number;
+  trendDirection: string;
+  careerLongevity: number;
+  createdAt: string;
+  updatedAt: string;
+  platforms: Platform[];
+  scoreHistory: ScoreHistoryItem[];
+  googleData?: {
+    organizations: any[];
+    locations: any[];
+    biography: string;
+    skills: any[];
+    urls: any[];
+  };
+}
+
+// Mock data for reviews and activity until we implement those endpoints
+const mockReviews = [
+  {
+    id: "1",
+    userName: "User 1",
+    userImage: "/placeholder.svg",
+    date: new Date().toISOString(),
+    rating: 8,
+    comment: "Great public figure with consistent engagement."
+  }
+];
+
+const mockActivity = [
+  {
+    id: "1",
+    type: "post",
+    platform: "Twitter",
+    title: "Recent Tweet",
+    content: "This is a sample tweet content",
+    date: new Date().toISOString(),
+    link: "https://twitter.com"
+  }
+];
 
 export default function ProfilePage({ params }: { params: { id: string } }) {
+  const id = use(Promise.resolve(params)).id
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [reviewVotes, setReviewVotes] = useState<Record<string, "up" | "down" | null>>({})
 
   useEffect(() => {
-    // Simulate API fetch
-    const fetchProfile = () => {
+    const fetchProfile = async () => {
       setLoading(true)
-      setTimeout(() => {
-        const foundProfile = getProfileById(params.id)
-        setProfile(foundProfile || null)
+      try {
+        const response = await fetch(`/api/profiles/${id}`)
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch profile')
+        }
+        
+        const data = await response.json()
+        setProfile(data)
+      } catch (err) {
+        console.error('Error fetching profile:', err)
+        setError('Failed to load profile data')
+      } finally {
         setLoading(false)
-      }, 500)
+      }
     }
 
     fetchProfile()
-  }, [params.id])
+  }, [id])
 
   useEffect(() => {
-    // Load Twitter widget
-    if (profile?.twitterHandle) {
-      const script = document.createElement("script")
-      script.src = "https://platform.twitter.com/widgets.js"
-      script.async = true
-      document.body.appendChild(script)
+    // Load Twitter widget if we have a Twitter platform
+    if (profile?.platforms) {
+      const twitterPlatform = profile.platforms.find(p => p.platform === 'twitter')
+      
+      if (twitterPlatform?.handle) {
+        const script = document.createElement("script")
+        script.src = "https://platform.twitter.com/widgets.js"
+        script.async = true
+        document.body.appendChild(script)
 
-      return () => {
-        document.body.removeChild(script)
+        return () => {
+          document.body.removeChild(script)
+        }
       }
     }
-  }, [profile?.twitterHandle])
+  }, [profile?.platforms])
 
   const handleVote = (reviewId: string, voteType: "up" | "down") => {
     setReviewVotes((prev) => {
@@ -63,26 +156,40 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
     )
   }
 
-  if (!profile) {
+  if (error || !profile) {
     return (
       <div className="container mx-auto py-12 px-4">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Profile Not Found</h1>
-          <p className="text-gray-400">The profile you are looking for does not exist.</p>
+          <p className="text-gray-400">{error || "The profile you are looking for does not exist."}</p>
         </div>
       </div>
     )
   }
 
+  // Find Twitter handle if available
+  const twitterPlatform = profile.platforms.find(p => p.platform === 'twitter')
+  const twitterHandle = twitterPlatform?.handle
+
+  // Calculate total followers across all platforms
+  const totalFollowers = profile.platforms.reduce((sum, platform) => sum + (platform.followers || 0), 0)
+  
+  // Calculate average engagement
+  const platformsWithEngagement = profile.platforms.filter(p => p.engagement !== undefined)
+  const avgEngagement = platformsWithEngagement.length > 0 
+    ? platformsWithEngagement.reduce((sum, p) => sum + (p.engagement || 0), 0) / platformsWithEngagement.length
+    : 0
+
   const scoreData = [
-    { name: "Credibility", value: profile.score.credibility, fill: "#f59e0b" },
-    { name: "Longevity", value: profile.score.longevity, fill: "#3b82f6" },
-    { name: "Engagement", value: profile.score.engagement, fill: "#10b981" },
+    { name: "Credibility", value: profile.credibilityScore, fill: "#f59e0b" },
+    { name: "Longevity", value: profile.longevityScore, fill: "#3b82f6" },
+    { name: "Engagement", value: profile.engagementScore, fill: "#10b981" },
   ]
 
-  const activityData = profile.recentActivity.map((activity) => ({
-    date: new Date(activity.date).toLocaleDateString(),
-    engagement: Math.random() * 100,
+  // Format score history for the chart
+  const activityData = profile.scoreHistory.map((history) => ({
+    date: new Date(history.date).toLocaleDateString(),
+    engagement: history.engagementScore,
   }))
 
   return (
@@ -106,7 +213,7 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
               <h1 className="text-3xl font-bold">{profile.name}</h1>
               <div className="flex items-center bg-gray-800 rounded-full px-4 py-2 mt-2 md:mt-0">
                 <Star size={20} className="text-yellow-500 mr-2" />
-                <span className="text-2xl font-bold">{profile.score.overall.toFixed(1)}</span>
+                <span className="text-2xl font-bold">{profile.overallScore.toFixed(1)}</span>
                 <span className="text-gray-400 ml-1">/10</span>
               </div>
             </div>
@@ -115,14 +222,14 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
               <span className="text-accent font-medium">{profile.profession}</span>
             </div>
 
-            <p className="text-gray-300 mb-6">{profile.bio}</p>
+            <p className="text-gray-300 mb-6">{profile.biography || profile.googleData?.biography || "No biography available."}</p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-gray-800 rounded-lg p-4 flex items-center">
                 <Calendar size={20} className="text-accent mr-3" />
                 <div>
                   <p className="text-sm text-gray-400">Active Since</p>
-                  <p className="font-medium">2010</p>
+                  <p className="font-medium">{new Date(profile.createdAt).getFullYear()}</p>
                 </div>
               </div>
 
@@ -130,7 +237,7 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
                 <Users size={20} className="text-accent mr-3" />
                 <div>
                   <p className="text-sm text-gray-400">Followers</p>
-                  <p className="font-medium">{profile.socialStats.followers.toLocaleString()}</p>
+                  <p className="font-medium">{totalFollowers.toLocaleString()}</p>
                 </div>
               </div>
 
@@ -138,7 +245,7 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
                 <BarChart3 size={20} className="text-accent mr-3" />
                 <div>
                   <p className="text-sm text-gray-400">Engagement Rate</p>
-                  <p className="font-medium">{profile.socialStats.engagement}%</p>
+                  <p className="font-medium">{avgEngagement.toFixed(1)}%</p>
                 </div>
               </div>
             </div>
@@ -196,9 +303,9 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
                   data={[
                     {
                       name: profile.name,
-                      credibility: profile.score.credibility,
-                      longevity: profile.score.longevity,
-                      engagement: profile.score.engagement,
+                      credibility: profile.credibilityScore,
+                      longevity: profile.longevityScore,
+                      engagement: profile.engagementScore,
                     },
                   ]}
                   margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
@@ -218,132 +325,41 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
         </div>
       </section>
 
-      {/* Recent Activity */}
+      {/* Recent Activity - Using Score History */}
       <section className="bg-gray-900 rounded-xl p-6 mb-8 border border-gray-800">
-        <h2 className="text-2xl font-bold mb-6">Recent Activity</h2>
+        <h2 className="text-2xl font-bold mb-6">Score History</h2>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="space-y-4">
-            {profile.recentActivity.map((activity) => (
-              <div key={activity.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            {profile.scoreHistory.map((history) => (
+              <div key={history.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-700 text-gray-300">
-                      {activity.type.charAt(0).toUpperCase() + activity.type.slice(1)}
-                      {activity.platform && ` • ${activity.platform}`}
+                      Score Update
                     </span>
                   </div>
-                  <span className="text-sm text-gray-400">{new Date(activity.date).toLocaleDateString()}</span>
+                  <span className="text-sm text-gray-400">{new Date(history.date).toLocaleDateString()}</span>
                 </div>
 
-                <h3 className="font-bold mb-2">{activity.title}</h3>
-                <p className="text-gray-300 text-sm mb-3">{activity.content}</p>
-
-                {activity.image && (
-                  <div className="mt-3">
-                    <Image
-                      src={activity.image || "/placeholder.svg"}
-                      alt={activity.title}
-                      width={500}
-                      height={300}
-                      className="rounded-lg w-full h-auto"
-                    />
+                <h3 className="font-bold mb-2">Overall Score: {history.overallScore.toFixed(1)}</h3>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <p className="text-gray-400">Credibility</p>
+                    <p className="font-medium">{history.credibilityScore.toFixed(1)}</p>
                   </div>
-                )}
-
-                {activity.link && (
-                  <a
-                    href={activity.link}
-                    className="text-accent hover:underline text-sm inline-block mt-2"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Read more
-                  </a>
-                )}
+                  <div>
+                    <p className="text-gray-400">Longevity</p>
+                    <p className="font-medium">{history.longevityScore.toFixed(1)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Engagement</p>
+                    <p className="font-medium">{history.engagementScore.toFixed(1)}</p>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
-
-          <div className="h-80">
-            <ChartContainer
-              config={{
-                engagement: {
-                  label: "Engagement",
-                  color: "hsl(var(--chart-2))",
-                },
-              }}
-              className="h-full"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={activityData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Legend />
-                  <Line type="monotone" dataKey="engagement" stroke="var(--color-engagement)" activeDot={{ r: 8 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </div>
-        </div>
-      </section>
-
-      {profile.twitterHandle && (
-        <section className="bg-gray-900 rounded-xl p-6 mb-8 border border-gray-800">
-          <h2 className="text-2xl font-bold mb-6">Twitter Feed</h2>
-          <div className="w-full">
-            <a 
-              className="twitter-timeline" 
-              data-theme="dark" 
-              data-height="600"
-              href={`https://twitter.com/${profile.twitterHandle}`}
-            >
-              Tweets by {profile.twitterHandle}
-            </a>
-          </div>
-        </section>
-      )}
-
-      {/* Reviews Section */}
-      <section className="bg-gray-900 rounded-xl p-6 mb-8 border border-gray-800">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold">User Reviews</h2>
-          <a
-            href={`/review/${profile.id}`}
-            className="bg-accent hover:bg-accent/90 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            Write a Review
-          </a>
-        </div>
-
-        <div className="space-y-6">
-          {profile.reviews.map((review) => (
-            <div key={review.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center">
-                  <Image
-                    src={review.userImage || "/placeholder.svg"}
-                    alt={review.userName}
-                    width={40}
-                    height={40}
-                    className="rounded-full mr-3"
-                  />
-                  <div>
-                    <h4 className="font-medium">{review.userName}</h4>
-                    <span className="text-sm text-gray-400">{new Date(review.date).toLocaleDateString()}</span>
-                  </div>
-                </div>
-                <div className="flex items-center bg-gray-700 rounded-full px-2 py-1">
-                  <Star size={14} className="text-yellow-500 mr-1" />
-                  <span className="font-medium">{review.rating}/10</span>
-                </div>
-              </div>
-
-              <p className="text-gray-300 mb-4">{review.comment}</p>
-            </div>
-          ))}
         </div>
       </section>
     </div>

@@ -8,9 +8,11 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; message: string }>
-  register: (userData: RegisterData) => Promise<{ success: boolean; message: string }>
-  logout: () => void
+  loginWithGoogle: () => Promise<{ success: boolean; message?: string }>
+  loginWithGithub: () => Promise<{ success: boolean; message?: string }>
+  logout: () => Promise<void>
   resetPassword: (email: string) => Promise<{ success: boolean; message: string }>
+  register: (userData: RegisterData) => Promise<{ success: boolean; message: string }>
 }
 
 export interface RegisterData {
@@ -107,6 +109,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const loginWithGoogle = async () => {
+    try {
+      // Redirect to Google OAuth endpoint with client ID
+      window.location.href = `/api/auth/google?client_id=1459465895-d923km9anbtiou62p879cebg9j8bvg66.apps.googleusercontent.com`;
+      return { success: true };
+    } catch (error) {
+      console.error('Google login error:', error);
+      return { success: false, message: 'Failed to initiate Google login' };
+    }
+  };
+
+  const loginWithGithub = async () => {
+    try {
+      // Redirect to GitHub OAuth endpoint
+      window.location.href = '/api/auth/github';
+      return { success: true };
+    } catch (error) {
+      console.error('GitHub login error:', error);
+      return { success: false, message: 'Failed to initiate GitHub login' };
+    }
+  };
+
   const register = async (userData: RegisterData) => {
     try {
       setIsLoading(true)
@@ -184,8 +208,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        loginWithGoogle,
+        loginWithGithub,
         register,
-        logout,
+        logout: async () => {
+          await Promise.resolve(logout())
+        },
         resetPassword,
       }}
     >
@@ -201,4 +229,3 @@ export function useAuth() {
   }
   return context
 }
-

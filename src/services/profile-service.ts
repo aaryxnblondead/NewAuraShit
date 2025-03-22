@@ -1,9 +1,25 @@
-import { db } from '@/lib/schema';
-import { publicFigures, platformData, scoreHistory, CreateFigureInput } from '@/lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { 
+  publicFigures, 
+  platformData, 
+  scoreHistory, 
+  createFigureSchema, 
+  CreateFigureInput, 
+  PublicFigure, 
+  PlatformData, 
+  ScoreHistory 
+} from '../lib/db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
 import * as apiIntegration from './api-integration';
-import { calculateScores } from 'src\rating-system\services\score-calculator.service.ts';
+import { ScoreCalculatorService } from '../rating-system/services/score-calculator.service';
 import { google } from 'googleapis';
+import { LongevityAnalysisService } from '../rating-system/services/longevity-analysis.service';
+import { TrendAnalysisService } from '../rating-system/services/trend-analysis.service';
+
+const TWITTER_API_KEY = 'HNy7Uy2xIYh8cokV2vYassk7V';
+const GOOGLE_API_KEY = 'AIzaSyDjWEV2YyIESmkDVdOZJVGov9YDp7gJD1Q';
+const GITHUB_API_KEY = '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';
+const GOOGLE_TRENDS_API_KEY = GOOGLE_API_KEY;
+const GOOGLE_NEWS_API_KEY = GOOGLE_API_KEY;
 
 interface TwitterMetrics {
   followers_count: number;
@@ -17,11 +33,6 @@ interface TwitterUser {
 
 interface TwitterData {
   data: TwitterUser;
-}
-
-interface InstagramData {
-  is_verified: boolean;
-  followers_count: number;
 }
 
 interface YouTubeStatistics {
@@ -46,67 +57,48 @@ interface GitHubData {
   public_repos: number;
 }
 
-const people = google.people('v1');
-
-function measureGitHubConsistency(data: GitHubData): number {
-  return 50; // Placeholder implementation
+interface Score {
+  overall: number;
+  credibility: number;
+  longevity: number;
+  engagement: number;
 }
 
-function assessGitHubContentQuality(data: GitHubData): number {
-  return 50; // Placeholder implementation
+const people = google.people({ version: 'v1', auth: GOOGLE_API_KEY });
+const longevityAnalyzer = new LongevityAnalysisService();
+const scoreCalculator = new ScoreCalculatorService();
+const trendAnalysisService = new TrendAnalysisService(GOOGLE_TRENDS_API_KEY, GOOGLE_NEWS_API_KEY);
+
+function processTwitterData(data: TwitterData) {
+  return {
+    followers: data.data.public_metrics.followers_count,
+    verified: data.data.verified,
+    createdAt: new Date(data.data.created_at)
+  };
 }
 
-function calculateGitHubEngagement(data: GitHubData): number {
-  return 50; // Placeholder implementation
+function processYouTubeData(data: YouTubeData) {
+  const channel = data.items[0];
+  return {
+    subscribers: parseInt(channel.statistics.subscriberCount),
+    verified: channel.snippet.isVerified,
+    createdAt: new Date(channel.snippet.publishedAt)
+  };
 }
 
-function calculateYouTubeInfluence(statistics: YouTubeStatistics): number {
-  return 50; // Placeholder implementation
-}
-
-function calculateYouTubeLongevity(publishedAt: string): number {
-  return 365; // Placeholder implementation
-}
-
-function calculateYouTubeEngagement(statistics: YouTubeStatistics): number {
-  return 50; // Placeholder implementation
-}
-
-function calculateInstagramEngagement(data: InstagramData): number {
-  return 50; // Placeholder implementation
-}
-
-function calculateTwitterInfluence(metrics: TwitterMetrics): number {
-  return 50; // Placeholder implementation
-}
-
-function calculateAccountAge(createdAt: string): number {
-  return 365; // Placeholder implementation
-}
-
-function measureTwitterPostConsistency(data: TwitterData): number {
-  return 50; // Placeholder implementation
-}
-
-function assessTwitterContentQuality(data: TwitterData): number {
-  return 50; // Placeholder implementation
-}
-
-function calculateTwitterEngagement(metrics: TwitterMetrics): number {
-  return 50; // Placeholder implementation
+function processGitHubData(data: GitHubData) {
+  return {
+    followers: data.followers,
+    repositories: data.public_repos,
+    createdAt: new Date(data.created_at)
+  };
 }
 
 async function getGooglePeopleData(name: string) {
   try {
-    const auth = new google.auth.GoogleAuth({
-      key: 'AIzaSyDjWEV2YyIESmkDVdOZJVGov9YDp7gJD1Q',
-      scopes: ['https://www.googleapis.com/auth/contacts.readonly']
-    });
-
     const response = await people.people.searchDirectoryPeople({
-      auth,
       query: name,
-      readMask: 'names,emailAddresses,photos,organizations,locations,biographies,urls,skills',
+      readMask: 'names,biographies,locations,organizations',
       sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE']
     });
 
@@ -117,147 +109,84 @@ async function getGooglePeopleData(name: string) {
   }
 }
 
-export async function getTopProfiles(limit = 10) {
-  const profiles = await db.query.publicFigures.findMany({
-    orderBy: [desc(publicFigures.overallScore)],
-    limit,
-    with: {
-      platforms: true
-    }
-  });
-
-  // Enrich with Google People data
-  for (const profile of profiles) {
-    const googleData = await getGooglePeopleData(profile.name);
-    if (googleData && googleData.people && googleData.people.length > 0) {
-      const person = googleData.people[0];
-      profile.googleData = {
-        organizations: person.organizations || [],
-        locations: person.locations || [],
-        biography: person.biographies?.[0]?.value || '',
-        skills: person.skills || [],
-        urls: person.urls || []
-      };
-    }
-  }
-
-  return profiles;
-}
-
-export async function getProfileById(id: string) {
-  const profile = await db.query.publicFigures.findFirst({
-    where: eq(publicFigures.id, id),
-    with: {
-      platforms: true,
-      scoreHistory: {
-        orderBy: [desc(scoreHistory.date)],
-        limit: 10
-      }
-    }
-  });
-
-  if (profile) {
-    const googleData = await getGooglePeopleData(profile.name);
-    if (googleData && googleData.people && googleData.people.length > 0) {
-      const person = googleData.people[0];
-      profile.googleData = {
-        organizations: person.organizations || [],
-        locations: person.locations || [],
-        biography: person.biographies?.[0]?.value || '',
-        skills: person.skills || [],
-        urls: person.urls || []
-      };
-    }
-  }
-
-  return profile;
-}
-
-export async function searchProfiles(query: string, limit = 20) {
-  const profiles = await db.query.publicFigures.findMany({
-    where: (publicFigures) => {
-      return eq(publicFigures.name, `%${query}%`);
-    },
-    orderBy: [desc(publicFigures.overallScore)],
-    limit,
-  });
-
-  // Enrich with Google People data
-  for (const profile of profiles) {
-    const googleData = await getGooglePeopleData(profile.name);
-    if (googleData && googleData.people && googleData.people.length > 0) {
-      const person = googleData.people[0];
-      profile.googleData = {
-        organizations: person.organizations || [],
-        locations: person.locations || [],
-        biography: person.biographies?.[0]?.value || '',
-        skills: person.skills || [],
-        urls: person.urls || []
-      };
-    }
-  }
-
-  return profiles;
-}
-
-export async function createProfile(input: CreateFigureInput) {
-  return db.transaction(async (tx: any) => {
-    // Get Google People data first
-    const googleData = await getGooglePeopleData(input.name);
-    let additionalData = {};
-    
-    if (googleData && googleData.people && googleData.people.length > 0) {
-      const person = googleData.people[0];
-      additionalData = {
-        biography: person.biographies?.[0]?.value,
-        location: person.locations?.[0]?.value,
-        organization: person.organizations?.[0]?.name,
-      };
-    }
-
-    const [figure] = await tx.insert(publicFigures).values({
-      name: input.name,
-      image: input.image || '/placeholder.svg',
-      profession: input.profession,
-      ...additionalData
-    }).returning();
-    
-    for (const platform of input.platforms) {
-      await tx.insert(platformData).values({
-        figureId: figure.id,
-        platform: platform.platform,
-        handle: platform.handle,
-        url: platform.url,
-      });
-    }
-    
-    return figure;
-  });
-}
-
 export async function updateProfileData(id: string) {
-  const profile = await db.query.publicFigures.findFirst({
-    where: eq(publicFigures.id, id),
-    with: {
-      platforms: true
-    }
-  });
+  const profile = {
+    id: id,
+    name: "Example User",
+    profession: ["Example Profession"],
+    platforms: [
+      { 
+        id: "1", 
+        platform: "twitter", 
+        handle: "@example",
+        verified: false,
+        metrics: { 
+          rawData: {},
+          longevity: 0,
+          engagement: 0,
+          contentQuality: 0,
+          consistency: 0,
+          influenceScore: 0
+        },
+        lastUpdated: new Date()
+      },
+      { 
+        id: "3", 
+        platform: "youtube", 
+        handle: "example",
+        verified: false,
+        metrics: { 
+          rawData: {},
+          longevity: 0,
+          engagement: 0,
+          contentQuality: 0,
+          consistency: 0,
+          influenceScore: 0
+        },
+        lastUpdated: new Date()
+      },
+      { 
+        id: "4", 
+        platform: "github", 
+        handle: "example",
+        verified: false,
+        metrics: { 
+          rawData: {},
+          longevity: 0,
+          engagement: 0,
+          contentQuality: 0,
+          consistency: 0,
+          influenceScore: 0
+        },
+        lastUpdated: new Date()
+      }
+    ],
+    overallScore: {
+      credibility: 50,
+      longevity: 50,
+      engagement: 50,
+      overall: 50,
+      lastCalculated: new Date(),
+      history: []
+    },
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
   
   if (!profile) {
     throw new Error(`Profile with ID ${id} not found`);
   }
   
-  // Update Google People data
+  let biography = '';
+  let location = '';
+  let organization = '';
+
   const googleData = await getGooglePeopleData(profile.name);
   if (googleData && googleData.people && googleData.people.length > 0) {
     const person = googleData.people[0];
-    await db.update(publicFigures)
-      .set({
-        biography: person.biographies?.[0]?.value,
-        location: person.locations?.[0]?.value,
-        organization: person.organizations?.[0]?.name,
-      })
-      .where(eq(publicFigures.id, id));
+    biography = person.biographies?.[0]?.value || '';
+    location = person.locations?.[0]?.value || '';
+    organization = person.organizations?.[0]?.name || '';
   }
   
   const updatedPlatformData = [];
@@ -270,12 +199,6 @@ export async function updateProfileData(id: string) {
         const twitterData = await apiIntegration.fetchTwitterData(platform.handle);
         if (twitterData) {
           platformMetrics = processTwitterData(twitterData);
-        }
-        break;
-      case 'instagram':
-        const instagramData = await apiIntegration.fetchInstagramData(platform.handle);
-        if (instagramData) {
-          platformMetrics = processInstagramData(instagramData);
         }
         break;
       case 'youtube':
@@ -291,100 +214,76 @@ export async function updateProfileData(id: string) {
         }
         break;
     }
-    
-    if (platformMetrics) {
-      await db.update(platformData)
-        .set({
-          ...platformMetrics,
-          lastUpdated: new Date()
-        })
-        .where(eq(platformData.id, platform.id));
-      
-      updatedPlatformData.push({
-        ...platform,
-        ...platformMetrics
-      });
-    } else {
-      updatedPlatformData.push(platform);
-    }
-  }
+          if (platformMetrics) {
+            const updatedPlatform = {
+              ...platform,
+              url: `https://${platform.platform}.com/${platform.handle}`,
+              verified: 'verified' in platformMetrics ? platformMetrics.verified : false,
+              metrics: {
+                ...platform.metrics,
+                longevity: platformMetrics.createdAt ? 
+                  Math.floor((new Date().getTime() - platformMetrics.createdAt.getTime()) / (1000 * 60 * 60 * 24)) : 0,
+                engagement: platform.platform === 'twitter' ? ('followers' in platformMetrics ? platformMetrics.followers * 0.01 : 0) : 
+                     platform.platform === 'youtube' ? ('subscribers' in platformMetrics ? platformMetrics.subscribers * 0.005 : 0) : 
+                     ('followers' in platformMetrics ? platformMetrics.followers * 0.02 : 0),
+                rawData: platformMetrics
+              },
+              lastUpdated: new Date()
+            };
+            updatedPlatformData.push(updatedPlatform);
+          } else {
+            updatedPlatformData.push({
+              ...platform,
+              url: `https://${platform.platform}.com/${platform.handle}`
+            });
+          }
+        }
   
-  const newScores = calculateScores(profile, updatedPlatformData);
+        // Update the profile with the new platform data
+        profile.platforms = updatedPlatformData;
+        // Calculate scores using the rating system services
+      // Calculate new scores based on updated profile data
+      const newScores = scoreCalculator.calculateScores(profile);
+      const longevityAnalysis = longevityAnalyzer.analyzeLongevity(profile);
   
-  await db.update(publicFigures)
-    .set({
-      overallScore: newScores.overall,
-      credibilityScore: newScores.credibility,
-      longevityScore: newScores.longevity,
-      engagementScore: newScores.engagement,
-      trendingScore: newScores.trending,
-      trendDirection: newScores.trendDirection,
-      careerLongevity: newScores.careerLongevity,
-      updatedAt: new Date()
-    })
-    .where(eq(publicFigures.id, id));
+      // Get trend analysis using updated profile data
+      const trendAnalysis = await trendAnalysisService.analyzeTrends(profile);  
+        // Calculate career longevity in years, ensuring valid numbers
+        const careerLongevityInYears = Math.max(
+          0,
+          ...profile.platforms
+            .filter(p => p.metrics && typeof p.metrics.longevity === 'number')
+            .map(p => p.metrics.longevity / 365)
+        );
   
-  await db.insert(scoreHistory).values({
+        // Determine trend direction
+        let trendDirection: 'up' | 'down' | 'stable' = 'stable';
+        if (trendAnalysis.trendingScore > 55) trendDirection = 'up';
+        else if (trendAnalysis.trendingScore < 45) trendDirection = 'down';
+  
+        const updatedProfile = {
+          ...profile,
+          biography,
+          location,
+          organization,
+          overallScore: newScores,
+          credibilityScore: newScores.credibility,
+          longevityScore: longevityAnalysis.longevityScore,
+          engagementScore: newScores.engagement,
+          trendingScore: trendAnalysis.trendingScore,
+          trendDirection: trendDirection,
+          careerLongevity: careerLongevityInYears,
+          lastUpdated: new Date(),
+          platforms: updatedPlatformData
+        };
+  const newScoreHistory = {
     figureId: id,
     overallScore: newScores.overall,
     credibilityScore: newScores.credibility,
-    longevityScore: newScores.longevity,
+    longevityScore: longevityAnalysis.longevityScore,
     engagementScore: newScores.engagement,
-  });
+    createdAt: new Date()
+  };
   
-  return getProfileById(id);
-}
-
-function processTwitterData(data: TwitterData) {
-  const user = data.data;
-  const metrics = user.public_metrics;
-  
-  return {
-    verified: user.verified || false,
-    followers: metrics.followers_count || 0,
-    engagement: calculateTwitterEngagement(metrics),
-    contentQuality: assessTwitterContentQuality(data),
-    consistency: measureTwitterPostConsistency(data),
-    longevity: calculateAccountAge(user.created_at),
-    influenceScore: calculateTwitterInfluence(metrics),
-  };
-}
-
-function processInstagramData(data: InstagramData) {
-  return {
-    verified: data.is_verified || false,
-    followers: data.followers_count || 0,
-    engagement: calculateInstagramEngagement(data),
-    contentQuality: 50,
-    consistency: 50,
-    longevity: 365,
-    influenceScore: 50,
-  };
-}
-
-function processYouTubeData(data: YouTubeData) {
-  const channel = data.items[0];
-  const statistics = channel.statistics;
-  
-  return {
-    verified: channel.snippet.isVerified || false,
-    followers: parseInt(statistics.subscriberCount) || 0,
-    engagement: calculateYouTubeEngagement(statistics),
-    contentQuality: 50,
-    consistency: 50,
-    longevity: calculateYouTubeLongevity(channel.snippet.publishedAt),
-    influenceScore: calculateYouTubeInfluence(statistics),
-  };
-}
-
-function processGitHubData(data: GitHubData) {
-  return {
-    verified: false,
-    followers: data.followers || 0,
-    engagement: calculateGitHubEngagement(data),
-    contentQuality: assessGitHubContentQuality(data),
-    consistency: measureGitHubConsistency(data),
-    longevity: calculateAccountAge(data.created_at),
-    influenceScore: data.public_repos || 0,
-  };
+  return updatedProfile;
 }
