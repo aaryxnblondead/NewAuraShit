@@ -5,8 +5,7 @@ import "./globals.css"
 import Navbar from "@/components/navbar"
 import Footer from "@/components/footer"
 import { AuthProvider } from "@/lib/auth-context"
-import { ToastProvider } from "@/components/toast-provider"
-
+import { Toaster } from 'react-hot-toast';
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
@@ -17,24 +16,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-gray-950 text-gray-100 min-h-screen flex flex-col`}>
-        <AuthProvider>
-          <ToastProvider>
-            <Navbar />
-            <main className="flex-grow">{children}</main>
-            <Footer />
-          </ToastProvider>
-        </AuthProvider>
+      <body>
+        <Toaster />
+        {children}
       </body>
     </html>
   )
 }
-
-
-
-import './globals.css'

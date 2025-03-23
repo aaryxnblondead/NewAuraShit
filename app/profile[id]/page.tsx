@@ -1,3 +1,4 @@
+"use client"
 import React, { useEffect, useState } from "react"
 import Image from "next/image"
 import { Star, ThumbsUp, ThumbsDown, Calendar, Users, BarChart3 } from "lucide-react"
