@@ -7,6 +7,7 @@ import { getProfileById, type Profile } from "@/lib/data"
 import { Star, ThumbsUp, ThumbsDown, Calendar, Users, BarChart3 } from "lucide-react"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Bar, BarChart } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import TwitterFeed from "@/components/twitter-feed"
 import WikipediaImage from "@/components/wikipedia-image"
 
 export default function ProfilePage({ params }: { params: { id: string } }) {
@@ -27,20 +28,6 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
 
     fetchProfile()
   }, [params.id])
-
-  useEffect(() => {
-    // Load Twitter widget
-    if (profile?.twitterHandle) {
-      const script = document.createElement("script")
-      script.src = "https://platform.twitter.com/widgets.js"
-      script.async = true
-      document.body.appendChild(script)
-
-      return () => {
-        document.body.removeChild(script)
-      }
-    }
-  }, [profile?.twitterHandle])
 
   const handleVote = (reviewId: string, voteType: "up" | "down") => {
     setReviewVotes((prev) => {
@@ -293,16 +280,7 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
       {profile.twitterHandle && (
         <section className="bg-gray-900 rounded-xl p-6 mb-8 border border-gray-800">
           <h2 className="text-2xl font-bold mb-6">Twitter Feed</h2>
-          <div className="w-full">
-            <a 
-              className="twitter-timeline" 
-              data-theme="dark" 
-              data-height="600"
-              href={`https://twitter.com/${profile.twitterHandle}`}
-            >
-              Tweets by {profile.twitterHandle}
-            </a>
-          </div>
+          <TwitterFeed username={profile.name} count={5} />
         </section>
       )}
 

@@ -24,9 +24,7 @@ export class ScoreCalculatorService {
     history.push(newScoreEntry);
     
     // Return updated score object
-    // finalScore is returned from calculateScores method and contains the complete Score object
-    // with credibility, longevity, engagement, overall score, calculation date and history
-    const finalScore: Score = {
+    return {
       credibility: credibilityScore,
       longevity: longevityScore,
       engagement: engagementScore,
@@ -34,8 +32,6 @@ export class ScoreCalculatorService {
       lastCalculated: new Date(),
       history
     };
-
-    return finalScore;
   }
   
   private calculateCredibilityScore(figure: PublicFigure): number {

@@ -6,17 +6,17 @@ interface ProfileCardProps {
   id: string
   name: string
   image: string
-  profession: string[]
+  profession: string
   score: number
   rank?: number
   trending?: boolean
-  // Rating system properties
-  credibilityScore: number
-  longevityScore: number
-  engagementScore: number
-  trendingScore: number
-  trendDirection: 'up' | 'down' | 'stable'
-  careerLongevity: number // in years
+  // New rating system properties
+  credibilityScore?: number
+  longevityScore?: number
+  engagementScore?: number
+  trendingScore?: number
+  trendDirection?: 'up' | 'down' | 'stable'
+  careerLongevity?: number // in years
   lastUpdated?: Date
 }
 
@@ -28,19 +28,17 @@ export default function ProfileCard({
   score, 
   rank, 
   trending,
-  credibilityScore,
-  longevityScore,
-  engagementScore,
-  trendingScore,
-  trendDirection,
-  careerLongevity,
+  credibilityScore = 0,
+  longevityScore = 0,
+  engagementScore = 0,
+  trendingScore = 0,
+  trendDirection = 'stable',
+  careerLongevity = 0,
   lastUpdated
 }: ProfileCardProps) {
   
   // Format scores to one decimal place
-  const formatScore = (score: number) => {
-    return score !== undefined ? score.toFixed(1) : '0.0'
-  }
+  const formatScore = (score: number) => score.toFixed(1)
   
   // Determine trend color
   const getTrendColor = () => {
@@ -82,7 +80,7 @@ export default function ProfileCard({
                 <span className="text-white text-sm font-medium">{formatScore(score)}</span>
               </div>
             </div>
-            <p className="text-gray-300 text-sm truncate">{typeof profession === 'string' ? profession : profession.join(", ")}</p>
+            <p className="text-gray-300 text-sm truncate">{profession}</p>
           </div>
         </div>
         
@@ -120,11 +118,12 @@ export default function ProfileCard({
             <div className="flex items-center">
               <TrendingUp size={12} className={`${getTrendColor()} mr-1`} />
               <span className={`${getTrendColor()} font-medium`}>
-                {trendingScore > 0 ? `+${formatScore(trendingScore)}%` : `${formatScore(trendingScore)}%`}
+                {trendingScore > 0 ? `+${trendingScore.toFixed(1)}%` : `${trendingScore.toFixed(1)}%`}
               </span>
             </div>
+            
             <div className="text-gray-400">
-              {careerLongevity > 0 ? `${formatScore(careerLongevity)} years in industry` : 'New to industry'}
+              {careerLongevity > 0 ? `${careerLongevity} years in industry` : 'New to industry'}
             </div>
           </div>
           
