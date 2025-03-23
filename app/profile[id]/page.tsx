@@ -1,12 +1,9 @@
-"use client"
-
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import Image from "next/image"
 import { Star, ThumbsUp, ThumbsDown, Calendar, Users, BarChart3 } from "lucide-react"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Bar, BarChart } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import WikipediaImage from "@/components/wikipedia-image"
-import { use } from "react"
 
 // Define the profile type based on the backend data structure
 interface Platform {
@@ -88,7 +85,7 @@ const mockActivity = [
 ];
 
 export default function ProfilePage({ params }: { params: { id: string } }) {
-  const id = use(Promise.resolve(params)).id
+  const id = React.use(Promise.resolve(params)).id
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -125,6 +122,8 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
       if (twitterPlatform?.handle) {
         const script = document.createElement("script")
         script.src = "https://platform.twitter.com/widgets.js"
+        script.setAttribute('data-chrome', 'noheader nofooter noborders transparent')
+        script.setAttribute('data-tweet-limit', '5')
         script.async = true
         document.body.appendChild(script)
 
@@ -134,11 +133,22 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
       }
     }
   }, [profile?.platforms])
-
+/*************  ✨ Codeium Command ⭐  *************/
+/******  42b3e753-487f-4a7a-871a-23b03db4a704  *******/
   const handleVote = (reviewId: string, voteType: "up" | "down") => {
     setReviewVotes((prev) => {
       if (prev[reviewId] === voteType) {
         const newVotes = { ...prev }
+/**
+ * Updates the vote type for a given review.
+ * 
+ * If the user has already voted with the same type, the vote is removed.
+ * Otherwise, the vote is set to the specified type.
+ * 
+ * @param reviewId - The ID of the review being voted on.
+ * @param voteType - The type of vote, either "up" or "down".
+ */
+
         delete newVotes[reviewId]
         return newVotes
       }
